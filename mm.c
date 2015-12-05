@@ -112,6 +112,7 @@ static void remove_from_list(unsigned int offset)
     {
         PUT(original_next + 8, original_prev);
     }
+    dbg_printf("remove_from_list(): %x removed from list\n", offset);
     return;
 }
 
@@ -127,6 +128,7 @@ static void insert_into_list(unsigned int offset)
       PUT(original_next + 8, offset);
   }
   PUT(CLASS(class), offset);
+  dbg_printf("insert_into_list(): %x inserted into list\n", offset);
 }
 
 /* join a block */
@@ -175,6 +177,7 @@ static unsigned int extend(int word)
     PUT(new_block + size_new, PACK(0, 1));
     /* link the list */
     insert_into_list(new_block);
+    dbg_printf("extend(): %d bytes extended from %x\n", size_new, new_block);
     return join(new_block);
 }
 
@@ -238,6 +241,7 @@ void *malloc (size_t size) {
         unsigned int current_size = SIZE(GET(min_ptr));
         PUT(min_ptr, PACK(current_size, 1));
         remove_from_list(min_ptr);
+        dbg_printf("malloc(): %d bytes allocated at %x\n", bytes, min_ptr);
         return (void*)CPTR(min_ptr + 12);
     }
     else
@@ -245,8 +249,9 @@ void *malloc (size_t size) {
         unsigned int new_block = extend(bytes/8);
         unsigned int current_size = SIZE(GET(new_block));
         PUT(new_block, PACK(current_size, 1));
-        remove_from_list(min_ptr);
-        return (void*)CPTR(min_ptr + 12);
+        remove_from_list(new_block);
+        dbg_printf("malloc(): %d bytes allocated at %x\n", bytes, new_block);
+        return (void*)CPTR(new_block + 12);
     }
 }
 
