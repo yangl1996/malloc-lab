@@ -32,16 +32,183 @@
 #define calloc mm_calloc
 #endif /* def DRIVER */
 
+/* word sizes of x64 */
+#define WSIZE 8  /* x64 pointer */
+#define HSIZE 4  /* x64 int */
+#define DSIZE 16 /* x64 double word */
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
+/* 2^0 to 2^(SAGCOUNT-1) sized blocks will have its own list */
+/* we will have SAGCOUNT + 1 classes in total */
+#define SAGCOUNT 12  /* choose an even number */
+/* class n: non-zero MSB at n
+   class 0: 1
+   class 1: 2-3
+   class 2: 4-7
+   ...
+*/
 
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(p) (((size_t)(p) + (ALIGNMENT-1)) & ~0x7)
+
+/* calculate actual pointer using heap begin and offset */
+#define CPTR(o) ((unsigned int)(o) + heap_begin)
+
+/* calculate offset from pointer and heap begin */
+#define COFF(p) ((char*)(p) - heap_begin)
+
+/* write to heap */
+#define PUT(p, data) (*(unsigned int*)((CPTR(p))) = (data))
+
+/* read from heap */
+#define GET(p) (*(unsigned int*)(CPTR(p)))
+
+/* pack header block */
+#define PACK(size, allocated) ((size) | (allocated))
+
+/* get class head offset */
+#define CLASS(class) ((unsigned int)((class) * HSIZE))
+
+/* get allocated bit */
+#define ALLOCED(head) ((unsigned int)((head) & 0x01))
+
+/* get size */
+#define SIZE(head) ((unsigned int)((head) & 0xFFFFFFFE))
+
+/* global variables */
+static char *heap_begin; /* to the first byte of a heap */
+static char *heap_end;   /* to the last byte of a heap */
+
+/* get class index */
+static inline unsigned int find_class(unsigned int bsize)
+{
+    int class = -1;
+    while (bsize != 0)
+    {
+        bsize >>= 1;
+        class++;
+    }
+    if (class >= SAGCOUNT)
+    {
+        return SAGCOUNT;
+    }
+    return class;
+}
+
+static void remove_from_list(unsigned int offset)
+{
+    unsigned int original_next = GET(offset + 4);
+    unsigned int original_prev = GET(offset + 8);
+    /* link next to prev */
+    if (original_prev > CLASS(SAGCOUNT))
+    {
+        PUT(original_prev + 4, original_next);
+    }
+    else
+    {
+        PUT(original_prev, original_next);
+    }
+    if (original_next != 0)
+    {
+        PUT(original_next + 8, original_prev);
+    }
+    return;
+}
+
+static void insert_into_list(unsigned int offset)
+{
+  unsigned int size = SIZE(GET(offset));
+  unsigned int class = find_class(size);
+  unsigned int original_next = GET(CLASS(class));
+  PUT(offset + 4, original_next);
+  PUT(offset + 8, CLASS(class));
+  if (original_next != 0)
+  {
+      PUT(original_next + 8, offset);
+  }
+  PUT(CLASS(class), offset);
+}
+
+/* join a block */
+static unsigned int join(unsigned int offset)
+{
+    // look backwords
+    unsigned int my_size;
+    if (!ALLOCED(GET(offset - HSIZE)))
+    {
+        my_size = SIZE(GET(offset));
+        unsigned int before_size = SIZE(GET(offset - HSIZE));
+        unsigned int new_size = my_size + before_size;
+        remove_from_list(offset);
+        remove_from_list(offset - before_size);
+        /* update head and foot stamp */
+        PUT(offset + my_size - HSIZE, PACK(new_size, 0));
+        PUT(offset - before_size, PACK(new_size, 0));
+        offset = offset - before_size;
+        /* update linked list */
+        insert_into_list(offset);
+    }
+    my_size = SIZE(GET(offset));
+    if (!ALLOCED(GET(offset + my_size)))
+    {
+        unsigned int next_size = SIZE(GET(offset + my_size));
+        unsigned int new_size = my_size + next_size;
+        remove_from_list(offset);
+        remove_from_list(offset + my_size);
+        PUT(offset, PACK(new_size, 0));
+        PUT(offset + new_size - HSIZE, PACK(new_size, 0));
+        insert_into_list(offset);
+    }
+    return offset;
+}
+
+/* extend a new free block */
+static unsigned int extend(int word)
+{
+    unsigned int size_new = (word >= 2) ? (word * WSIZE) : (2 * WSIZE);
+    /* increase heap */
+    unsigned int new_block = COFF(mem_sbrk(size_new)) - HSIZE;
+    /* set header */
+    PUT(new_block, PACK(size_new, 0));
+    /* set footer */
+    PUT(new_block + size_new - 4, PACK(size_new, 0));
+    PUT(new_block + size_new, PACK(0, 1));
+    /* link the list */
+    insert_into_list(new_block);
+    return join(new_block);
+}
+
+/* Heap Layout
+First SAGCOUNT + 1 Ints: list heads at address 0 to SAGCOUNT
+Prologue
+Prologue
+....
+(int HEAD ... int FOOT)
+Epilogue
+*/
+
+/* Free Block Layout
+int Head
+int prev
+int next
+int Foot
+*/
 
 /*
  * Initialize: return -1 on error, 0 on success.
  */
 int mm_init(void) {
+    int init_allocate = HSIZE * (SAGCOUNT + 4); /* keep it an even number for allignment */
+    mem_sbrk(init_allocate);
+    heap_begin = (char*)mem_heap_lo();
+    heap_end = (char*)mem_heap_hi();
+    for (int i = 0; i < SAGCOUNT + 1; i++)
+    {
+        PUT(CLASS(i), 0);
+    }
+    PUT((SAGCOUNT + 1) * HSIZE, PACK(WSIZE, 1));
+    PUT((SAGCOUNT + 2) * HSIZE, PACK(WSIZE, 1));
+    PUT((SAGCOUNT + 3) * HSIZE, PACK(0, 1));
     return 0;
 }
 
@@ -49,7 +216,38 @@ int mm_init(void) {
  * malloc
  */
 void *malloc (size_t size) {
-    return NULL;
+    unsigned int bytes = (unsigned int)ALIGN(size);
+    bytes += 16;
+    int class = find_class(bytes);
+    unsigned int find_ptr = GET(CLASS(class));
+    unsigned int min_space = 999999999;;
+    unsigned int min_ptr = 0;
+    /* find in the same class */
+    while (find_ptr != 0)
+    {
+        unsigned int current_size = SIZE(GET(find_ptr));
+        if ((current_size >= bytes) && ((current_size - bytes) > min_space))
+        {
+            min_space = current_size - bytes;
+            min_ptr = find_ptr;
+        }
+        find_ptr = GET(find_ptr + 4);
+    }
+    if (min_ptr)
+    {
+        unsigned int current_size = SIZE(GET(min_ptr));
+        PUT(min_ptr, PACK(current_size, 1));
+        remove_from_list(min_ptr);
+        return (void*)CPTR(min_ptr + 12);
+    }
+    else
+    {
+        unsigned int new_block = extend(bytes/8);
+        unsigned int current_size = SIZE(GET(new_block));
+        PUT(new_block, PACK(current_size, 1));
+        remove_from_list(min_ptr);
+        return (void*)CPTR(min_ptr + 12);
+    }
 }
 
 /*
@@ -57,13 +255,48 @@ void *malloc (size_t size) {
  */
 void free (void *ptr) {
     if(!ptr) return;
+    unsigned int to_remove = COFF(ptr);
+    unsigned int current_size = SIZE(GET(to_remove));
+    PUT(to_remove, PACK(current_size, 0));
+    insert_into_list(to_remove);
+    join(to_remove);
+    return;
 }
 
 /*
  * realloc - you may want to look at mm-naive.c
  */
 void *realloc(void *oldptr, size_t size) {
-    return NULL;
+    size_t oldsize;
+    void *newptr;
+
+    /* If size == 0 then this is just free, and we return NULL. */
+    if(size == 0) {
+      free(oldptr);
+      return 0;
+    }
+
+    /* If oldptr is NULL, then this is just malloc. */
+    if(oldptr == NULL) {
+      return malloc(size);
+    }
+
+    newptr = malloc(size);
+
+    /* If realloc() fails the original block is left untouched  */
+    if(!newptr) {
+      return 0;
+    }
+
+    /* Copy the old data. */
+    oldsize = (size_t)SIZE(GET(COFF(oldptr)));
+    if(size < oldsize) oldsize = size;
+    memcpy(newptr, oldptr, oldsize);
+
+    /* Free the old block. */
+    free(oldptr);
+
+    return newptr;
 }
 
 /*
@@ -72,7 +305,13 @@ void *realloc(void *oldptr, size_t size) {
  * needed to run the traces.
  */
 void *calloc (size_t nmemb, size_t size) {
-    return NULL;
+    size_t bytes = nmemb * size;
+    void *newptr;
+
+    newptr = malloc(bytes);
+    memset(newptr, 0, bytes);
+
+    return newptr;
 }
 
 
