@@ -306,7 +306,7 @@ void *realloc(void *oldptr, size_t size) {
     }
 
     /* Copy the old data. */
-    oldsize = (size_t)SIZE(GET(COFF(oldptr)));
+    oldsize = (size_t)(SIZE(GET(COFF(oldptr))) - 16);
     if(size < oldsize) oldsize = size;
     memcpy(newptr, oldptr, oldsize);
 
