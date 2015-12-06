@@ -226,8 +226,11 @@ int mm_init(void) {
  * malloc
  */
 void *malloc (size_t size) {
-    unsigned int bytes = (unsigned int)ALIGN(size);
-    bytes += 16;
+    unsigned int bytes = (unsigned int)ALIGN((size + 8));
+    if (bytes < 16)
+    {
+        bytes = 16;
+    }
     dbg_printf("malloc(): allocating %u bytes\n", bytes);
     unsigned int class = find_class(bytes);
     unsigned int find_ptr = GET(CLASS(class));
@@ -244,7 +247,8 @@ void *malloc (size_t size) {
         }
         find_ptr = GET(find_ptr + 4);
     }
-    /* TODO: if cannot find in current class, search higher class */
+    /* if cannot find in current class, search higher class */
+    /* TODO: search for best in higher class */
     class++;
     if (!min_ptr)
     {
@@ -264,8 +268,8 @@ void *malloc (size_t size) {
     if (min_ptr)
     {
         unsigned int current_size = SIZE(GET(min_ptr));
-        PUT(min_ptr, PACK(current_size, 1));
-        PUT(min_ptr + current_size - 4, PACK(current_size, 1));
+        //PUT(min_ptr, PACK(current_size, 1));
+        //PUT(min_ptr + current_size - 4, PACK(current_size, 1));
         remove_from_list(min_ptr);
         if ((current_size - bytes) >= 16)
         {
@@ -281,7 +285,7 @@ void *malloc (size_t size) {
             PUT(min_ptr + current_size - 4, PACK(current_size, 1));
         }
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, min_ptr);
-        return (void*)CPTR(min_ptr + 12);
+        return (void*)CPTR(min_ptr + 4);
     }
     else
     {
@@ -291,7 +295,7 @@ void *malloc (size_t size) {
         PUT(new_block + current_size - 4, PACK(current_size, 1));
         remove_from_list(new_block);
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, new_block);
-        return (void*)CPTR(new_block + 12);
+        return (void*)CPTR(new_block + 4);
     }
 }
 
@@ -300,10 +304,11 @@ void *malloc (size_t size) {
  */
 void free (void *ptr) {
     if(!ptr) return;
-    unsigned int to_remove = COFF(ptr) - 12;
+    unsigned int to_remove = COFF(ptr) - 4;
     unsigned int current_size = SIZE(GET(to_remove));
     dbg_printf("free(): freeing %u bytes at %x\n", current_size, to_remove);
     PUT(to_remove, PACK(current_size, 0));
+    //PUT(to_remove + current_size - 4, PACK(current_size, 0));
     insert_into_list(to_remove);
     join(to_remove);
     return;
@@ -335,7 +340,7 @@ void *realloc(void *oldptr, size_t size) {
     }
 
     /* Copy the old data. */
-    oldsize = (size_t)(SIZE(GET(COFF(oldptr))) - 16);
+    oldsize = (size_t)(SIZE(GET(COFF(oldptr))) - 8);
     if(size < oldsize) oldsize = size;
     memcpy(newptr, oldptr, oldsize);
 
