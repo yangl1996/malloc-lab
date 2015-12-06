@@ -1,8 +1,8 @@
 /*
  * mm.c
  *
- * NOTE TO STUDENTS: Replace this header comment with your own header
- * comment that gives a high level description of your solution.
+ * Use sagregated lists to store free blocks. New free blocks inserted using
+ * FIFO manner. Allocate blocks using best fit strategy.
  */
 #include <assert.h>
 #include <stdio.h>
@@ -414,7 +414,7 @@ static int aligned(const void *p) {
  * mm_checkheap
  */
 void mm_checkheap(int verbose) {
-    printf("just use this parameter %d", verbose);
+    printf("verbose level %d, actually useless ;)", verbose);
     for (int i = 0; i <= SAGCOUNT; i++)
     {
         unsigned int current_ptr = GET(CLASS(i));
@@ -433,7 +433,7 @@ void mm_checkheap(int verbose) {
             }
             else
             {
-                printf("deep dark fantasy\n");
+                printf("head or foot mark broken! deep dark fantasy\n");
             }
             if (GET(GET(current_ptr + 8) + 4) == current_ptr)
             {
@@ -441,7 +441,7 @@ void mm_checkheap(int verbose) {
             }
             else
             {
-                printf("what the hell you are doing now!\n");
+                printf("linked list borken! what the hell you are doing now!\n");
             }
         }
     }
