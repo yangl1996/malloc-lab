@@ -15,7 +15,7 @@
 
 /* If you want debugging output, use the following macro.  When you hand
  * in, remove the #define DEBUG line. */
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -82,6 +82,7 @@ static char *heap_end;   /* to the last byte of a heap */
 /* get class index */
 static inline unsigned int find_class(unsigned int bsize)
 {
+    dbg_printf("find_class(): finding class for size %u\n", bsize);
     int class = -1;
     while (bsize != 0)
     {
@@ -92,6 +93,7 @@ static inline unsigned int find_class(unsigned int bsize)
     {
         return SAGCOUNT;
     }
+    dbg_printf("find_class(): class %u found\n", class);
     return class;
 }
 
@@ -134,10 +136,12 @@ static void insert_into_list(unsigned int offset)
 /* join a block */
 static unsigned int join(unsigned int offset)
 {
+    dbg_printf("join(): joining %x\n", offset);
     // look backwords
     unsigned int my_size;
     if (!ALLOCED(GET(offset - HSIZE)))
     {
+        dbg_printf("join(): joining with previous block\n");
         my_size = SIZE(GET(offset));
         unsigned int before_size = SIZE(GET(offset - HSIZE));
         unsigned int new_size = my_size + before_size;
@@ -153,6 +157,7 @@ static unsigned int join(unsigned int offset)
     my_size = SIZE(GET(offset));
     if (!ALLOCED(GET(offset + my_size)))
     {
+        dbg_printf("join(): joining with next block\n");
         unsigned int next_size = SIZE(GET(offset + my_size));
         unsigned int new_size = my_size + next_size;
         remove_from_list(offset);
@@ -177,7 +182,7 @@ static unsigned int extend(int word)
     PUT(new_block + size_new, PACK(0, 1));
     /* link the list */
     insert_into_list(new_block);
-    dbg_printf("extend(): %d bytes extended from %x\n", size_new, new_block);
+    dbg_printf("extend(): %u bytes extended from %x\n", size_new, new_block);
     return join(new_block);
 }
 
@@ -212,6 +217,7 @@ int mm_init(void) {
     PUT((SAGCOUNT + 1) * HSIZE, PACK(WSIZE, 1));
     PUT((SAGCOUNT + 2) * HSIZE, PACK(WSIZE, 1));
     PUT((SAGCOUNT + 3) * HSIZE, PACK(0, 1));
+    dbg_printf("mm_init(): heap initialized\n");
     return 0;
 }
 
@@ -221,7 +227,8 @@ int mm_init(void) {
 void *malloc (size_t size) {
     unsigned int bytes = (unsigned int)ALIGN(size);
     bytes += 16;
-    int class = find_class(bytes);
+    dbg_printf("malloc(): allocating %u bytes\n", bytes);
+    unsigned int class = find_class(bytes);
     unsigned int find_ptr = GET(CLASS(class));
     unsigned int min_space = 999999999;;
     unsigned int min_ptr = 0;
@@ -236,12 +243,15 @@ void *malloc (size_t size) {
         }
         find_ptr = GET(find_ptr + 4);
     }
+    /* TODO: if cannot find in current class, search higher class */
     if (min_ptr)
     {
         unsigned int current_size = SIZE(GET(min_ptr));
         PUT(min_ptr, PACK(current_size, 1));
+        PUT(min_ptr + current_size - 4, PACK(current_size, 1));
+        /* TODO: do split here */
         remove_from_list(min_ptr);
-        dbg_printf("malloc(): %d bytes allocated at %x\n", bytes, min_ptr);
+        dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, min_ptr);
         return (void*)CPTR(min_ptr + 12);
     }
     else
@@ -249,8 +259,9 @@ void *malloc (size_t size) {
         unsigned int new_block = extend(bytes/8);
         unsigned int current_size = SIZE(GET(new_block));
         PUT(new_block, PACK(current_size, 1));
+        PUT(new_block + current_size - 4, PACK(current_size, 1));
         remove_from_list(new_block);
-        dbg_printf("malloc(): %d bytes allocated at %x\n", bytes, new_block);
+        dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, new_block);
         return (void*)CPTR(new_block + 12);
     }
 }
@@ -260,8 +271,9 @@ void *malloc (size_t size) {
  */
 void free (void *ptr) {
     if(!ptr) return;
-    unsigned int to_remove = COFF(ptr);
+    unsigned int to_remove = COFF(ptr) - 12;
     unsigned int current_size = SIZE(GET(to_remove));
+    dbg_printf("free(): freeing %u bytes at %x\n", current_size, to_remove);
     PUT(to_remove, PACK(current_size, 0));
     insert_into_list(to_remove);
     join(to_remove);
