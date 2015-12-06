@@ -137,7 +137,7 @@ static inline void insert_into_list(unsigned int offset)
 static inline unsigned int join(unsigned int offset)
 {
     dbg_printf("join(): joining %x\n", offset);
-    // look backwords
+    /* look backwords */
     unsigned int my_size;
     if (!ALLOCED(GET(offset - HSIZE)))
     {
@@ -268,8 +268,6 @@ void *malloc (size_t size) {
     if (min_ptr)
     {
         unsigned int current_size = SIZE(GET(min_ptr));
-        //PUT(min_ptr, PACK(current_size, 1));
-        //PUT(min_ptr + current_size - 4, PACK(current_size, 1));
         remove_from_list(min_ptr);
         if ((current_size - bytes) >= 16)
         {
@@ -308,6 +306,7 @@ void free (void *ptr) {
     unsigned int current_size = SIZE(GET(to_remove));
     dbg_printf("free(): freeing %u bytes at %x\n", current_size, to_remove);
     PUT(to_remove, PACK(current_size, 0));
+    /* TODO: should put end tag here, but if we do, needle.rep will run out memory */
     //PUT(to_remove + current_size - 4, PACK(current_size, 0));
     insert_into_list(to_remove);
     join(to_remove);
