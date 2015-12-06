@@ -15,7 +15,9 @@
 
 /* If you want debugging output, use the following macro.  When you hand
  * in, remove the #define DEBUG line. */
+/* TODO: remove them before submission */
 //#define DEBUG
+//#define check
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -283,6 +285,9 @@ void *malloc (size_t size) {
             PUT(min_ptr + current_size - 4, PACK(current_size, 1));
         }
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, min_ptr);
+        #ifdef check
+        mm_checkheap(0);
+        #endif
         return (void*)CPTR(min_ptr + 4);
     }
     else
@@ -293,6 +298,9 @@ void *malloc (size_t size) {
         PUT(new_block + current_size - 4, PACK(current_size, 1));
         remove_from_list(new_block);
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, new_block);
+        #ifdef check
+        mm_checkheap(0);
+        #endif
         return (void*)CPTR(new_block + 4);
     }
 }
@@ -310,6 +318,9 @@ void free (void *ptr) {
     //PUT(to_remove + current_size - 4, PACK(current_size, 0));
     insert_into_list(to_remove);
     join(to_remove);
+    #ifdef check
+    mm_checkheap(0);
+    #endif
     return;
 }
 
@@ -385,4 +396,25 @@ static int aligned(const void *p) {
  * mm_checkheap
  */
 void mm_checkheap(int verbose) {
+    for (int i = 0; i <= SAGCOUNT; i++)
+    {
+        unsigned int current_ptr = GET(CLASS(i));
+        while (current_ptr != 0)
+        {
+            current_ptr = GET(current_ptr + 4);
+            if (current_ptr == 0)
+            {
+                printf("ok");
+                break;
+            }
+            if (GET(GET(current_ptr + 8) + 4) == current_ptr)
+            {
+                /* do nothing */
+            }
+            else
+            {
+                printf("what the hell you are doing now!\n");
+            }
+        }
+    }
 }
