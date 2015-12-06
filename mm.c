@@ -17,7 +17,7 @@
  * in, remove the #define DEBUG line. */
 /* TODO: remove them before submission */
 //#define DEBUG
-//#define check
+//#define CHECK
 #ifdef DEBUG
 # define dbg_printf(...) printf(__VA_ARGS__)
 #else
@@ -242,10 +242,14 @@ void *malloc (size_t size) {
     while (find_ptr != 0)
     {
         unsigned int current_size = SIZE(GET(find_ptr));
-        if ((current_size >= bytes) && ((current_size - bytes) > min_space))
+        if ((current_size >= bytes) && ((current_size - bytes) < min_space))
         {
             min_space = current_size - bytes;
             min_ptr = find_ptr;
+            if (min_space == 0)
+            {
+                break;
+            }
         }
         find_ptr = GET(find_ptr + 4);
     }
@@ -258,7 +262,17 @@ void *malloc (size_t size) {
         {
             if (GET(CLASS(class)) != 0)
             {
-                min_ptr = GET(CLASS(class));
+                find_ptr = GET(CLASS(class));
+                while (find_ptr != 0)
+                {
+                    unsigned int current_size = SIZE(GET(find_ptr));
+                    if ((current_size - bytes) < min_space)
+                    {
+                        min_space = current_size - bytes;
+                        min_ptr = find_ptr;
+                    }
+                    find_ptr = GET(find_ptr + 4);
+                }
                 break;
             }
             else
@@ -285,7 +299,7 @@ void *malloc (size_t size) {
             PUT(min_ptr + current_size - 4, PACK(current_size, 1));
         }
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, min_ptr);
-        #ifdef check
+        #ifdef CHECK
         mm_checkheap(0);
         #endif
         return (void*)CPTR(min_ptr + 4);
@@ -298,7 +312,7 @@ void *malloc (size_t size) {
         PUT(new_block + current_size - 4, PACK(current_size, 1));
         remove_from_list(new_block);
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, new_block);
-        #ifdef check
+        #ifdef CHECK
         mm_checkheap(0);
         #endif
         return (void*)CPTR(new_block + 4);
@@ -315,7 +329,7 @@ void free (void *ptr) {
     dbg_printf("free(): freeing %u bytes at %x\n", current_size, to_remove);
     PUT(to_remove, PACK(current_size, 0));
     /* TODO: should put end tag here, but if we do, needle.rep will run out memory */
-    //PUT(to_remove + current_size - 4, PACK(current_size, 0));
+    PUT(to_remove + current_size - 4, PACK(current_size, 0));
     insert_into_list(to_remove);
     join(to_remove);
     #ifdef check
@@ -404,8 +418,17 @@ void mm_checkheap(int verbose) {
             current_ptr = GET(current_ptr + 4);
             if (current_ptr == 0)
             {
-                printf("ok");
                 break;
+            }
+            unsigned current_size = SIZE(GET(current_ptr));
+            unsigned foot_size = SIZE(GET(current_ptr + current_size - 4));
+            if (current_size == foot_size)
+            {
+                /* do nothing */
+            }
+            else
+            {
+                printf("deep dark fantasy\n");
             }
             if (GET(GET(current_ptr + 8) + 4) == current_ptr)
             {
