@@ -394,22 +394,27 @@ void *calloc (size_t nmemb, size_t size) {
  * Return whether the pointer is in the heap.
  * May be useful for debugging.
  */
+ /*
 static int in_heap(const void *p) {
     return p <= mem_heap_hi() && p >= mem_heap_lo();
 }
+*/
 
 /*
  * Return whether the pointer is aligned.
  * May be useful for debugging.
  */
+ /*
 static int aligned(const void *p) {
     return (size_t)ALIGN(p) == (size_t)p;
 }
 
+*/
 /*
  * mm_checkheap
  */
 void mm_checkheap(int verbose) {
+    printf("just use this parameter %d", verbose);
     for (int i = 0; i <= SAGCOUNT; i++)
     {
         unsigned int current_ptr = GET(CLASS(i));
