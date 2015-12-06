@@ -97,7 +97,7 @@ static inline unsigned int find_class(unsigned int bsize)
     return class;
 }
 
-static void remove_from_list(unsigned int offset)
+static inline void remove_from_list(unsigned int offset)
 {
     unsigned int original_next = GET(offset + 4);
     unsigned int original_prev = GET(offset + 8);
@@ -118,7 +118,7 @@ static void remove_from_list(unsigned int offset)
     return;
 }
 
-static void insert_into_list(unsigned int offset)
+static inline void insert_into_list(unsigned int offset)
 {
   unsigned int size = SIZE(GET(offset));
   unsigned int class = find_class(size);
@@ -134,7 +134,7 @@ static void insert_into_list(unsigned int offset)
 }
 
 /* join a block */
-static unsigned int join(unsigned int offset)
+static inline unsigned int join(unsigned int offset)
 {
     dbg_printf("join(): joining %x\n", offset);
     // look backwords
@@ -165,12 +165,13 @@ static unsigned int join(unsigned int offset)
         PUT(offset, PACK(new_size, 0));
         PUT(offset + new_size - HSIZE, PACK(new_size, 0));
         insert_into_list(offset);
+        my_size = new_size;
     }
     return offset;
 }
 
 /* extend a new free block */
-static unsigned int extend(int word)
+static inline unsigned int extend(int word)
 {
     unsigned int size_new = (word >= 2) ? (word * WSIZE) : (2 * WSIZE);
     /* increase heap */
