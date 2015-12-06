@@ -244,13 +244,41 @@ void *malloc (size_t size) {
         find_ptr = GET(find_ptr + 4);
     }
     /* TODO: if cannot find in current class, search higher class */
+    class++;
+    if (!min_ptr)
+    {
+        while (class <= SAGCOUNT)
+        {
+            if (GET(CLASS(class)) != 0)
+            {
+                min_ptr = GET(CLASS(class));
+                break;
+            }
+            else
+            {
+                class++;
+            }
+        }
+    }
     if (min_ptr)
     {
         unsigned int current_size = SIZE(GET(min_ptr));
         PUT(min_ptr, PACK(current_size, 1));
         PUT(min_ptr + current_size - 4, PACK(current_size, 1));
-        /* TODO: do split here */
         remove_from_list(min_ptr);
+        if ((current_size - bytes) >= 16)
+        {
+            PUT(min_ptr, PACK(bytes, 1));
+            PUT(min_ptr + bytes - 4, PACK(bytes, 1));
+            PUT(min_ptr + bytes, PACK(current_size - bytes, 0));
+            PUT(min_ptr + current_size - 4, PACK(current_size - bytes, 0));
+            insert_into_list(min_ptr + bytes);
+        }
+        else
+        {
+            PUT(min_ptr, PACK(current_size, 1));
+            PUT(min_ptr + current_size - 4, PACK(current_size, 1));
+        }
         dbg_printf("malloc(): %u bytes allocated at %x\n", bytes, min_ptr);
         return (void*)CPTR(min_ptr + 12);
     }
